@@ -1,0 +1,9 @@
+{
+  "srcAmiId": "ami-6869aa05",
+  "amiName": "demo-app",
+  "sshUser": "ec2-user",
+  "instanceProfile": "demo-app",
+  "subnetId": "subnet-ab868fe2",
+  "vpcId": "vpc-e59df383",
+  "userDataFile": "packer/demo-app_userdata.sh"
+}
