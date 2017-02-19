@@ -1,0 +1,49 @@
+//Title:          Application Build Jenkins File 
+//Version:        v1.0
+//Description:    This jenkins file build the simple PHP application with the help of docker instance and test the application using PHP test framework.Once the test //is successfully compeleted ,application RPM build is done and updated in the yum repositary ,later the application version is send as parameter to the downstream //application delivery pipeline job
+//Stages  configured 
+//Build the simple PHP application 
+//Run the test using php test framework
+//Build the RPM
+//Update the Yum repor with simple application build previously
+//Trigger the downstream Job with Application version
+
+#!groovy
+
+node {
+
+  step([$class: 'WsCleanup'])
+
+  stage "Checkout Git repo"
+    checkout scm
+    def gitHash = sh returnStdout: true, script:"printf \$(git rev-parse --short HEAD)"
+    echo "Proceeding with Git hash: ${gitHash}"
+
+  stage "Run tests"
+    sh "docker run -v \$(pwd):/app --rm phpunit/phpunit tests/"
+
+  stage "Build RPM"
+    sh "[ -d ./rpm ] || mkdir ./rpm"
+    sh "docker run -v \$(pwd)/src:/data/demo-app -v \$(pwd)/rpm:/data/rpm --rm tenzer/fpm \
+          fpm -s dir -t rpm -n demo-app -v ${gitHash} \
+            --description \"Demo PHP app\" \
+            --directories /var/www/demo-app \
+            --package /data/rpm/demo-app-${gitHash}.rpm \
+            /data/demo-app=/var/www/ \
+       "
+
+  stage "Update YUM repo"
+    sh "[ -d ~/repo/rpm/demo-app/ ] || mkdir -p ~/repo/rpm/demo-app/"
+    sh "mv ./rpm/*.rpm ~/repo/rpm/demo-app/"
+    sh "createrepo --update --cachedir ~/repo.cache ~/repo/"
+    sh "aws s3 sync ~/repo s3://MY_BUCKET_NAME_SEL/ --region us-east-1 --delete"
+
+  stage "Check YUM repo"
+    sh "sudo yum clean expire-cache >/dev/null"
+    sh "sudo yum repolist >/dev/null"
+    
+
+  stage "Trigger downstream"
+    build job: "demo-app-cdelivery", parameters: [[$class: "StringParameterValue", name: "APP_VERSION", value: "${gitHash}-1"]], wait: false
+
+}
