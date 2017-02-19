@@ -1,0 +1,89 @@
+//Title:          Image Build using  packer and  Jenkins File 
+//Version:        v1.0
+//Description:    This jenkins file build the AMI image along with apps using serverspec,Packer utilities and test the image by creating the test intsance.Once the //testing is completed , test instance is terminatted 
+//Down stream Application deployment Job is Invoked by passsing the AMI ID of the AMI build n this pipeline  
+// Stages configured 
+// Run Packer to Validate and build the AMI 
+// Deploy the AMI 
+// Launch the test instance
+// Register with ELB 
+// Run the Test 
+// Terminate the test Instance
+// Trigger the down stream Job with AMI ID 
+ 
+x#!groovy
+
+node {
+
+  step([$class: 'WsCleanup'])
+
+  stage "Checkout Git repo"
+    checkout scm
+
+  stage "Checkout additional repos"
+    dir("salt") {
+      git "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/salt"
+    }
+
+  stage "Run Packer"
+    sh "/opt/packer validate -var=\"appVersion=$APP_VERSION\" -var-file=packer/demo-app_vars.json packer/demo-app.json"
+    sh "/opt/packer build -machine-readable -var=\"appVersion=$APP_VERSION\" -var-file=packer/demo-app_vars.json packer/demo-app.json | tee packer/packer.log"
+
+  stage "Deploy AMI"
+    def amiId = sh returnStdout: true, script:"tail -n1 packer/packer.log | awk '{printf \$NF}'"
+    def ec2Keypair = "admin"
+    def secGroup = "sg-5b337f27"
+    def instanceType = "t2.nano"
+    def subnetId = "subnet-ab868fe2"
+    def instanceProfile = "demo-app"
+
+    echo "Launching an instance from ${amiId}"
+    sh "aws ec2 run-instances \
+        --region us-east-1 \
+        --image-id ${amiId} \
+        --key-name ${ec2Keypair} \
+        --security-group-ids ${secGroup} \
+        --instance-type ${instanceType} \
+        --subnet-id ${subnetId} \
+        --iam-instance-profile Name=${instanceProfile} \
+        | tee .ec2_run-instances.log \
+       "
+
+    def instanceId = sh returnStdout: true, script: "printf \$(jq .Instances[0].InstanceId < .ec2_run-instances.log)"
+
+    sh "aws ec2 create-tags --resources ${instanceId} \
+        --region us-east-1 \
+        --tags Key=Name,Value=\"Jenkins (demo-app-$APP_VERSION)\" Key=CreatedBy,Value=Jenkins \
+       "
+
+    echo "Registering with ELB"
+    def elbId = "demo-app-elb"
+    sh "aws elb register-instances-with-load-balancer \
+        --region us-east-1 \
+        --load-balancer-name ${elbId} \
+        --instances ${instanceId} \
+       "
+
+  stage "Run  test"
+    def elbUri = "demo-app-elb-887494218.us-east-1.elb.amazonaws.com/"  
+    sh "ab -c5 -n1000 -d -S ${elbUri} | tee .ab.log"
+    def non2xx = sh returnStdout: true, script:"set -o pipefail;(grep 'Non-2xx' .ab.log | awk '{printf \$NF}') || (printf 0)"
+    def writeErr = sh returnStdout: true, script:"grep 'Write errors' .ab.log | awk '{printf \$NF}'"
+    def failedReqs = sh returnStdout: true, script:"grep 'Failed requests' .ab.log | awk '{printf \$NF}'"
+    def rps = sh returnStdout: true, script:"grep 'Requests per second' .ab.log | awk '{printf \$4}' | awk -F. '{printf \$1}'"
+    def docLen = sh returnStdout: true, script:"grep 'Document Length' .ab.log | awk '{printf \$3}'"
+
+    echo "Non2xx=${non2xx}, WriteErrors=${writeErr}, FailedReqs=${failedReqs}, ReqsPerSec=${rps}, DocLength=${docLen}"
+    sh "if [ ${non2xx} -gt 10 ] || [ ${writeErr} -gt 10 ] || [ ${failedReqs} -gt 10 ] || [ ${rps} -lt 500 ] || [ ${docLen} -lt 10 ]; then \
+          echo \"ERR: AB test failed\" | tee -a .error.log; \
+        fi \
+        "
+
+  stage "Terminate test instance"
+    sh "aws ec2 terminate-instances --region us-east-1 --instance-ids ${instanceId}"
+
+  
+  stage "Trigger downstream"
+    build job: "demo-app-cdeployment", parameters: [[$class: "StringParameterValue", name: "AMI_ID", value: "${amiId}"]], wait: false
+
+}
