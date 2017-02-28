@@ -1,7 +1,8 @@
 //Title:          Image Build using  packer and  Jenkins File 
 //Version:        v1.0
-//Description:    This jenkins file build the AMI image along with apps using serverspec,Packer utilities and test the image by creating the test intsance.Once the //testing is completed , test instance is terminatted 
-//Down stream Application deployment Job is Invoked by passsing the AMI ID of the AMI build n this pipeline  
+//Description:    This jenkins file build AMI image along with apps using serverspec and Packer utilities .Test  the image by 
+//creating the test intsance.Once the testing is completed , test instance is terminated 
+//Later Down stream Application deployment Job is Invoked by passsing the AMI ID of the AMI build in this pipeline  
 // Stages configured 
 // Run Packer to Validate and build the AMI 
 // Deploy the AMI 
