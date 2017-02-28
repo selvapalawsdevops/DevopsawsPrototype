@@ -1,6 +1,6 @@
 //Title:          Deploy application  using  Green blue deployment approach 
 //Version:        v1.0
-//Description:    This jenkins file build the deploy the instances and attach it with scaling group and ELB  
+//Description:    This jenkins file deploy the instances and attach it with scaling group and ELB  
 // Stages configured 
 // Deploy the Application -Attach the Instance with Autoscaling group and ELB using the Green blue deployment approach 
 
