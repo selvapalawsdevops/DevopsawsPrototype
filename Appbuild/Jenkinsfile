@@ -1,6 +1,8 @@
 //Title:          Application Build Jenkins File 
 //Version:        v1.0
-//Description:    This jenkins file build the simple PHP application with the help of docker instance and test the application using PHP test framework.Once the test //is successfully compeleted ,application RPM build is done and updated in the yum repositary ,later the application version is send as parameter to the downstream //application delivery pipeline job
+//Description:    This jenkins file build the simple PHP application with the help of docker instance and test the application using 
+//PHP test framework.Once the test is successfully compeleted ,application RPM build is done and updated in the yum repositary 
+//later the application version is send as parameter to the downstream application delivery pipeline job
 //Stages  configured 
 //Build the simple PHP application 
 //Run the test using php test framework
