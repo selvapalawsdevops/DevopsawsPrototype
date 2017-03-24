@@ -12,7 +12,7 @@
 // Terminate the test Instance
 // Trigger the down stream Job with AMI ID 
  
-x#!groovy
+#!groovy
 
 node {
 
